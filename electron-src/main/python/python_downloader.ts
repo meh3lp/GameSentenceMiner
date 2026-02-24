@@ -1,39 +1,46 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { Downloader } from 'nodejs-file-downloader';
-import * as tar from 'tar';
-import extract from 'extract-zip';
 import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { BASE_DIR, execFileAsync, getPlatform, isWindows, isMacOS } from '../util.js';
 import { mainWindow } from '../main.js';
 import { dialog, shell } from 'electron';
+import { downloadFile, extractArchive, cleanupArchive } from '../downloader/utils.js';
+import { getDependencyEntry } from '../store.js';
 
 // --- Constants ---
 
 const PYTHON_VERSION = '3.13';
-const VENV_DIR = path.join(BASE_DIR, 'python_venv');
-const UV_DIR = path.join(BASE_DIR, 'uv');
 
-// --- Path Helpers ---
+// --- Path Helpers (store-backed with defaults) ---
+
+function getUvDir(): string {
+    const entry = getDependencyEntry('uv');
+    return entry?.path || path.join(BASE_DIR, 'uv');
+}
+
+function getVenvDir(): string {
+    const entry = getDependencyEntry('python');
+    return entry?.path || path.join(BASE_DIR, 'python_venv');
+}
 
 /**
  * Gets the path to the uv executable.
  */
 function getUvExecutablePath(): string {
     return isWindows() 
-        ? path.join(UV_DIR, 'uv.exe')
-        : path.join(UV_DIR, 'uv');
+        ? path.join(getUvDir(), 'uv.exe')
+        : path.join(getUvDir(), 'uv');
 }
 
 /**
  * Gets the expected full path to the Python executable in the venv.
  */
-function getPythonExecutablePath(): string {
+export function getPythonExecutablePath(): string {
     return isWindows()
-        ? path.join(VENV_DIR, 'Scripts', 'python.exe')
-        : path.join(VENV_DIR, 'bin', 'python');
+        ? path.join(getVenvDir(), 'Scripts', 'python.exe')
+        : path.join(getVenvDir(), 'bin', 'python');
 }
 
 /**
@@ -51,74 +58,7 @@ function isUvInstalled(): boolean {
 }
 
 // --- Core Installation Steps ---
-
-/**
- * Downloads a file from a URL to a specified directory.
- * @param url The URL of the file to download.
- * @param directory The destination directory.
- * @param fileName The name to save the file as.
- * @returns The full path to the downloaded file.
- */
-async function downloadFile(url: string, directory: string, fileName: string): Promise<string> {
-    console.log(`Downloading from ${url}...`);
-
-    fs.mkdirSync(directory, { recursive: true });
-
-    const downloader = new Downloader({
-        url,
-        directory,
-        fileName,
-        cloneFiles: false,
-    });
-    
-    const finalFilePath = path.join(directory, fileName);
-
-    try {
-        const { filePath, downloadStatus } = await downloader.download();
-        if (downloadStatus !== 'COMPLETE' || !filePath) {
-            throw new Error(`Download status was ${downloadStatus}.`);
-        }
-        console.log(`Download complete: ${filePath}`);
-        return filePath;
-    } catch (error: any) {
-        if (error.code === 'ENOENT' && fs.existsSync(finalFilePath)) {
-            console.warn(
-                `Download appears successful, but a non-critical cleanup error occurred. Ignoring. Details: ${error.message}`
-            );
-            return finalFilePath;
-        }
-        console.error(`Failed to download file from ${url}: ${error.message || error}`);
-        throw error;
-    }
-}
-
-/**
- * Extracts a .tar.gz or .zip archive to a specified path.
- * @param archivePath The full path to the archive file.
- * @param extractPath The directory to extract the contents into.
- */
-async function extractArchive(archivePath: string, extractPath: string): Promise<void> {
-    console.log(`Extracting ${archivePath} to ${extractPath}...`);
-
-    fs.mkdirSync(extractPath, { recursive: true });
-
-    try {
-        if (archivePath.endsWith('.zip')) {
-            // Extract zip file using extract-zip (works reliably on all platforms)
-            await extract(archivePath, { dir: path.resolve(extractPath) });
-        } else {
-            // Extract tar.gz file
-            await tar.x({
-                file: archivePath,
-                cwd: extractPath,
-            });
-        }
-        console.log('Extraction complete.');
-    } catch (error: any) {
-        console.error(`Extraction failed: ${error.message || error}`);
-        throw error;
-    }
-}
+// Note: downloadFile, extractArchive, cleanupArchive are imported from ../downloader/utils.js
 
 /**
  * Downloads and installs uv if not already present.
@@ -169,15 +109,16 @@ async function ensureUvInstalled(): Promise<void> {
         fileName = 'uv.tar.gz';
     }
 
+    const uvDir = getUvDir();
     const downloadsDir = path.join(BASE_DIR, 'downloads');
     let archivePath: string | undefined;
 
     try {
         archivePath = await downloadFile(uvUrl, downloadsDir, fileName);
-        await extractArchive(archivePath, UV_DIR);
+        await extractArchive(archivePath, uvDir);
         
         // The extracted archive contains a directory with uv binary, need to move it up
-        const extractedDir = path.join(UV_DIR, extractedDirName);
+        const extractedDir = path.join(uvDir, extractedDirName);
         if (fs.existsSync(extractedDir)) {
             const uvBinary = isWindows() ? 'uv.exe' : 'uv';
             const sourcePath = path.join(extractedDir, uvBinary);
@@ -199,10 +140,7 @@ async function ensureUvInstalled(): Promise<void> {
         console.error(`Failed to install uv: ${error.message || error}`);
         throw error;
     } finally {
-        if (archivePath && fs.existsSync(archivePath)) {
-            console.log(`Cleaning up downloaded archive: ${archivePath}`);
-            fs.unlinkSync(archivePath);
-        }
+        cleanupArchive(archivePath || '');
     }
 }
 
@@ -325,10 +263,11 @@ async function installPythonWithHomebrew(): Promise<void> {
  * Creates a virtual environment using the Homebrew-installed Python.
  */
 async function createVenvWithHomebrewPython(): Promise<void> {
-    console.log(`Creating virtual environment at ${VENV_DIR}...`);
+    const venvDir = getVenvDir();
+    console.log(`Creating virtual environment at ${venvDir}...`);
     
     try {
-        fs.mkdirSync(path.dirname(VENV_DIR), { recursive: true });
+        fs.mkdirSync(path.dirname(venvDir), { recursive: true });
         
         // Use the Homebrew Python 3.13 to create venv
         const homebrewPython = '/opt/homebrew/bin/python3.13'; // ARM Mac
@@ -344,8 +283,8 @@ async function createVenvWithHomebrewPython(): Promise<void> {
             }
         }
         
-        await execFileAsync(pythonBin, ['-m', 'venv', VENV_DIR]);
-        console.log(`Virtual environment created successfully at ${VENV_DIR}`);
+        await execFileAsync(pythonBin, ['-m', 'venv', venvDir]);
+        console.log(`Virtual environment created successfully at ${venvDir}`);
         
         // Ensure pip is installed in the venv
         console.log('Ensuring pip is installed in the virtual environment...');
@@ -466,11 +405,12 @@ async function _performInstallation(): Promise<void> {
     }
 
     // Create virtual environment using uv
-    console.log(`Creating virtual environment at ${VENV_DIR}...`);
+    const venvDir = getVenvDir();
+    console.log(`Creating virtual environment at ${venvDir}...`);
     try {
-        fs.mkdirSync(path.dirname(VENV_DIR), { recursive: true });
-        await execFileAsync(uvPath, ['venv', '--python', PYTHON_VERSION, '--seed', VENV_DIR]);
-        console.log(`Virtual environment created successfully at ${VENV_DIR}`);
+        fs.mkdirSync(path.dirname(venvDir), { recursive: true });
+        await execFileAsync(uvPath, ['venv', '--python', PYTHON_VERSION, '--seed', venvDir]);
+        console.log(`Virtual environment created successfully at ${venvDir}`);
     } catch (error: any) {
         console.error(`Failed to create virtual environment using uv: ${error.message || error}`);
         throw error;
@@ -580,9 +520,10 @@ export async function reinstallPython(): Promise<void> {
     console.log('Starting Python reinstallation...');
 
     // Remove existing venv
-    if (fs.existsSync(VENV_DIR)) {
-        console.log(`Removing existing Python venv at: ${VENV_DIR}`);
-        fs.rmSync(VENV_DIR, { recursive: true, force: true });
+    const venvDir = getVenvDir();
+    if (fs.existsSync(venvDir)) {
+        console.log(`Removing existing Python venv at: ${venvDir}`);
+        fs.rmSync(venvDir, { recursive: true, force: true });
     }
 
     console.log('Existing installation removed. Proceeding with fresh installation...');

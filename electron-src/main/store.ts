@@ -3,6 +3,31 @@ import { SteamGame } from "./ui/steam.js";
 import {ObsScene} from "./ui/obs.js";
 import { BrowserWindow } from "electron";
 
+// ============================================================================
+// Dependency Configuration Types
+// ============================================================================
+
+export type DependencySource = 'downloaded' | 'detected' | 'manual' | 'none';
+
+export interface DependencyEntry {
+    /** Absolute path to the dependency install directory */
+    path: string;
+    /** Whether the dependency is confirmed installed */
+    installed: boolean;
+    /** How the dependency was acquired */
+    source: DependencySource;
+}
+
+export interface DependenciesConfig {
+    uv: DependencyEntry;
+    python: DependencyEntry;
+    obs: DependencyEntry;
+    ffmpeg: DependencyEntry;
+    oneocr: DependencyEntry;
+    ocenaudio: DependencyEntry;
+    portaudio: DependencyEntry;
+}
+
 
 interface YuzuConfig {
     emuPath: string;
@@ -113,6 +138,8 @@ interface StoreConfig {
     agentPath: string;
     OCR: OCRConfig;
     hasCompletedSetup: boolean;
+    dependencies: DependenciesConfig;
+    iconStyle: string;
 }
 
 export const store = new Store<StoreConfig>({
@@ -179,6 +206,16 @@ export const store = new Store<StoreConfig>({
         visibleTabs: ['launcher', 'stats', 'python', 'console'], // Default all tabs visible
         statsEndpoint: 'overview', // Default stats endpoint
         hasCompletedSetup: false,
+        dependencies: {
+            uv: { path: '', installed: false, source: 'none' },
+            python: { path: '', installed: false, source: 'none' },
+            obs: { path: '', installed: false, source: 'none' },
+            ffmpeg: { path: '', installed: false, source: 'none' },
+            oneocr: { path: '', installed: false, source: 'none' },
+            ocenaudio: { path: '', installed: false, source: 'none' },
+            portaudio: { path: '', installed: false, source: 'none' },
+        },
+        iconStyle: 'gsm',
     },
     cwd: "electron"
 });
@@ -316,6 +353,26 @@ export function getHasCompletedSetup(): boolean {
 
 export function setHasCompletedSetup(completed: boolean): void {
     store.set("hasCompletedSetup", completed);
+}
+
+// ============================================================================
+// Dependency Config Accessors
+// ============================================================================
+
+export function getDependenciesConfig(): DependenciesConfig {
+    return store.get('dependencies');
+}
+
+export function setDependenciesConfig(config: DependenciesConfig): void {
+    store.set('dependencies', config);
+}
+
+export function getDependencyEntry(depId: keyof DependenciesConfig): DependencyEntry {
+    return store.get(`dependencies.${depId}`) as DependencyEntry;
+}
+
+export function setDependencyEntry(depId: keyof DependenciesConfig, entry: DependencyEntry): void {
+    store.set(`dependencies.${depId}`, entry);
 }
 
 //OCR

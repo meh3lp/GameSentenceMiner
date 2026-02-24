@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameSentenceMiner — Dependency Setup</title>
+    <style>
+        :root {
+            --background-color: #1a1a1a;
+            --surface-color: #2c2c2c;
+            --surface-hover: #353535;
+            --primary-color: #1a73e8;
+            --lighter-primary: #4285f4;
+            --text-color: #e0e0e0;
+            --text-muted: #999;
+            --border-color: #444;
+            --success-color: #4caf50;
+            --error-color: #f44336;
+            --warning-color: #ff9800;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Scrollbar */
+        *::-webkit-scrollbar { width: 10px; }
+        *::-webkit-scrollbar-track { background: var(--surface-color); }
+        *::-webkit-scrollbar-thumb { background: #555; border-radius: 5px; }
+        *::-webkit-scrollbar-thumb:hover { background: #666; }
+
+        /* ---- Header ---- */
+        .header {
+            padding: 20px 28px 12px;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+        .header h1 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .header p {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* ---- Scrollable body ---- */
+        .dep-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 28px 16px;
+        }
+
+        /* ---- Dependency section card ---- */
+        .dep-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 18px 20px;
+            margin-bottom: 14px;
+            transition: border-color 0.2s;
+        }
+        .dep-card.installed {
+            border-color: var(--success-color);
+        }
+        .dep-card.missing {
+            border-color: var(--warning-color);
+        }
+        .dep-card.downloading {
+            border-color: var(--primary-color);
+        }
+
+        .dep-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .dep-name {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .dep-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .dep-badge.installed { background: var(--success-color); color: #fff; }
+        .dep-badge.missing { background: var(--warning-color); color: #000; }
+        .dep-badge.downloading { background: var(--primary-color); color: #fff; }
+        .dep-badge.optional { background: #555; color: #ccc; }
+
+        .dep-desc {
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
+        /* Path row */
+        .path-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .path-input {
+            flex: 1;
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-color);
+            padding: 7px 10px;
+            font-size: 13px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            outline: none;
+        }
+        .path-input:focus {
+            border-color: var(--primary-color);
+        }
+        .path-input:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .btn {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+            white-space: nowrap;
+        }
+        .btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        .btn-browse {
+            background: var(--surface-hover);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+        .btn-browse:hover:not(:disabled) {
+            background: #444;
+        }
+        .btn-download {
+            background: var(--primary-color);
+            color: #fff;
+        }
+        .btn-download:hover:not(:disabled) {
+            background: var(--lighter-primary);
+        }
+        .btn-skip {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            font-size: 12px;
+            padding: 5px 12px;
+        }
+        .btn-skip:hover:not(:disabled) {
+            background: var(--surface-hover);
+        }
+
+        /* Action row */
+        .action-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        /* Progress bar */
+        .progress-wrap {
+            display: none;
+            margin-top: 10px;
+        }
+        .progress-wrap.visible { display: block; }
+        .progress-bar-outer {
+            height: 6px;
+            background: var(--background-color);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-bar-inner {
+            height: 100%;
+            width: 0%;
+            background: var(--primary-color);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Source label */
+        .source-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* ---- System package card ---- */
+        .sys-pkg-info {
+            margin-top: 4px;
+        }
+        .sys-pkg-distro {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        .sys-pkg-distro strong {
+            color: var(--text-color);
+        }
+        .sys-pkg-cmd-wrap {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .sys-pkg-cmd {
+            flex: 1;
+            background: #111;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: #8be9fd;
+            padding: 9px 14px;
+            font-size: 13px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            user-select: all;
+            cursor: text;
+            white-space: nowrap;
+            overflow-x: auto;
+        }
+        .btn-copy {
+            background: var(--surface-hover);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 7px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+        .btn-copy:hover { background: #444; }
+        .btn-check-again {
+            background: var(--primary-color);
+            color: #fff;
+            padding: 7px 18px;
+            font-size: 13px;
+            font-weight: 500;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-check-again:hover { background: var(--lighter-primary); }
+        .btn-check-again:disabled { opacity: 0.45; cursor: not-allowed; }
+        .sys-pkg-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            font-style: italic;
+        }
+
+        /* ---- Footer ---- */
+        .footer {
+            padding: 14px 28px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .footer-status {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .btn-continue {
+            background: var(--success-color);
+            color: #fff;
+            padding: 10px 32px;
+            font-size: 15px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+        }
+        .btn-continue:hover:not(:disabled) {
+            background: #43a047;
+        }
+        .btn-continue:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* ---- Venv location section ---- */
+        .venv-section {
+            padding: 16px 28px 0;
+            flex-shrink: 0;
+        }
+        .venv-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 18px 20px;
+        }
+        .venv-card .dep-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .venv-card .dep-name { font-size: 16px; font-weight: 600; }
+        .venv-card .dep-desc { color: var(--text-muted); font-size: 12px; margin-bottom: 12px; }
+        .venv-card .path-row { display: flex; gap: 8px; align-items: center; }
+        .venv-size-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 8px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <h1>🔧 Dependency Setup</h1>
+        <p>Configure installation paths for required dependencies. All required items must be installed before continuing.</p>
+    </div>
+
+    <!-- Venv location picker -->
+    <div class="venv-section">
+        <div class="venv-card">
+            <div class="dep-header">
+                <span class="dep-name">Python Virtual Environment</span>
+                <span class="dep-badge optional" style="background:#555;color:#ccc;">~9 GB</span>
+            </div>
+            <div class="dep-desc">
+                Choose where to install the Python virtual environment and all required packages.
+                The app will automatically create the venv here on first launch.
+            </div>
+            <div class="path-row">
+                <input type="text" class="path-input" id="venv-path" placeholder="Virtual environment path">
+                <button class="btn btn-browse" onclick="browseVenvPath()">Browse</button>
+            </div>
+            <div class="venv-size-hint">Estimated disk usage: ~9 GB (Python runtime + all packages)</div>
+        </div>
+    </div>
+
+    <!-- Dependency list -->
+    <div class="dep-list" id="dep-list">
+        <!-- Populated by JS -->
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <span class="footer-status" id="footer-status">Loading...</span>
+        <button class="btn-continue" id="btn-continue" disabled>Continue</button>
+    </div>
+
+    <script src="shared.js"></script>
+    <script>
+        // ====================================================================
+        // State
+        // ====================================================================
+        let deps = [];          // Array of DependencyStatus from main process
+        let downloading = {};   // depId -> true while downloading
+
+        // ====================================================================
+        // Init
+        // ====================================================================
+        async function init() {
+            // Load venv path
+            const venvPath = await ipcRenderer.invoke('setup.getVenvPath');
+            document.getElementById('venv-path').value = venvPath || '';
+
+            deps = await ipcRenderer.invoke('setup.getDeps');
+            render();
+            updateFooter();
+
+            // Listen for progress events
+            ipcRenderer.on('setup.progress', (_, data) => {
+                onProgress(data.depId, data.percentage);
+            });
+        }
+
+        // ====================================================================
+        // Render
+        // ====================================================================
+        function render() {
+            const container = document.getElementById('dep-list');
+            container.innerHTML = '';
+
+            for (const dep of deps) {
+                container.appendChild(createDepCard(dep));
+            }
+        }
+
+        function createDepCard(dep) {
+            const card = document.createElement('div');
+            card.className = 'dep-card ' + getCardClass(dep);
+            card.id = `card-${dep.id}`;
+
+            // ---- System package card (no browse / no download) ----
+            if (dep.systemPackage) {
+                return createSystemPkgCard(card, dep);
+            }
+
+            const isLocked = dep.installed || downloading[dep.id];
+            const isDownloading = !!downloading[dep.id];
+
+            // Badge
+            let badgeClass = 'missing';
+            let badgeText = dep.required ? 'Required' : 'Optional';
+            if (dep.installed) { badgeClass = 'installed'; badgeText = 'Installed'; }
+            else if (isDownloading) { badgeClass = 'downloading'; badgeText = 'Downloading'; }
+
+            card.innerHTML = `
+                <div class="dep-header">
+                    <span class="dep-name">${dep.name}</span>
+                    <span class="dep-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                <div class="dep-desc">${dep.description}</div>
+                <div class="path-row">
+                    <input type="text" class="path-input" id="path-${dep.id}"
+                        value="${escHtml(dep.path)}"
+                        ${isLocked ? 'disabled' : ''}
+                        placeholder="Installation path">
+                    <button class="btn btn-browse" id="browse-${dep.id}"
+                        ${isLocked ? 'disabled' : ''}
+                        onclick="browsePath('${dep.id}')">Browse</button>
+                </div>
+                <div class="action-row">
+                    ${!dep.installed && !isDownloading ? `
+                        <button class="btn btn-download" id="dl-${dep.id}"
+                            onclick="confirmDownload('${dep.id}')">Download</button>
+                    ` : ''}
+                    ${!dep.required && !dep.installed && !isDownloading ? `
+                        <button class="btn btn-skip" onclick="skipDep('${dep.id}')">Skip (optional)</button>
+                    ` : ''}
+                    ${dep.installed && dep.source !== 'none' ? `
+                        <span class="source-label">Source: ${dep.source}${dep.systemPath ? ' (' + dep.systemPath + ')' : ''}</span>
+                    ` : ''}
+                </div>
+                <div class="progress-wrap ${isDownloading ? 'visible' : ''}" id="progress-${dep.id}">
+                    <div class="progress-bar-outer">
+                        <div class="progress-bar-inner" id="pbar-${dep.id}" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-text" id="ptext-${dep.id}">Starting download...</div>
+                </div>
+            `;
+
+            // Debounced path change check
+            const pathInput = card.querySelector(`#path-${dep.id}`);
+            if (pathInput && !isLocked) {
+                let debounceTimer;
+                pathInput.addEventListener('input', () => {
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(() => onPathChanged(dep.id), 500);
+                });
+            }
+
+            return card;
+        }
+
+        function getCardClass(dep) {
+            if (dep.installed) return 'installed';
+            if (downloading[dep.id]) return 'downloading';
+            return 'missing';
+        }
+
+        function escHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        // ====================================================================
+        // System package card (e.g. portaudio on Linux)
+        // ====================================================================
+        /** Cache for system package info so we only call IPC once */
+        const sysPkgInfoCache = {};
+
+        function createSystemPkgCard(card, dep) {
+            // Badge
+            let badgeClass = dep.installed ? 'installed' : 'missing';
+            let badgeText = dep.installed ? 'Installed' : (dep.required ? 'Required' : 'Optional');
+
+            card.innerHTML = `
+                <div class="dep-header">
+                    <span class="dep-name">${dep.name}</span>
+                    <span class="dep-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                <div class="dep-desc">${dep.description}</div>
+                <div class="sys-pkg-info" id="syspkg-${dep.id}">
+                    ${dep.installed
+                        ? `<span class="source-label">✓ Library detected on your system</span>`
+                        : `<div class="sys-pkg-distro">Detecting distribution...</div>`
+                    }
+                </div>
+            `;
+
+            // If not installed, load distro info and render install command
+            if (!dep.installed) {
+                loadSystemPkgInfo(dep.id);
+            }
+
+            return card;
+        }
+
+        async function loadSystemPkgInfo(depId) {
+            if (!sysPkgInfoCache[depId]) {
+                sysPkgInfoCache[depId] = await ipcRenderer.invoke('setup.getSystemPackageInfo', depId);
+            }
+            const info = sysPkgInfoCache[depId];
+            const container = document.getElementById(`syspkg-${depId}`);
+            if (!container) return;
+
+            container.innerHTML = `
+                <div class="sys-pkg-distro">Detected distribution: <strong>${escHtml(info.distroName)}</strong></div>
+                <div class="sys-pkg-cmd-wrap">
+                    <code class="sys-pkg-cmd" id="cmd-${depId}">${escHtml(info.installCommand)}</code>
+                    <button class="btn btn-copy" onclick="copyInstallCmd('${depId}')">Copy</button>
+                </div>
+                <div class="action-row">
+                    <button class="btn btn-check-again" id="check-${depId}"
+                        onclick="checkSystemLib('${depId}')">Check Again</button>
+                </div>
+                <div class="sys-pkg-hint">Run the command above in a terminal, then click "Check Again" to verify.</div>
+            `;
+        }
+
+        function copyInstallCmd(depId) {
+            const el = document.getElementById(`cmd-${depId}`);
+            if (!el) return;
+            const text = el.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = el.parentElement.querySelector('.btn-copy');
+                if (btn) {
+                    btn.textContent = 'Copied!';
+                    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+                }
+            });
+        }
+
+        async function checkSystemLib(depId) {
+            const btn = document.getElementById(`check-${depId}`);
+            if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
+
+            const result = await ipcRenderer.invoke('setup.checkSystemLib', depId);
+
+            const dep = deps.find(d => d.id === depId);
+            if (dep && result.installed) {
+                dep.installed = true;
+                dep.source = 'detected';
+            }
+
+            render();
+            updateFooter();
+        }
+
+        // ====================================================================
+        // Venv path picker
+        // ====================================================================
+        async function browseVenvPath() {
+            const result = await ipcRenderer.invoke('setup.browseVenv');
+            if (!result) return;
+            document.getElementById('venv-path').value = result;
+            await ipcRenderer.invoke('setup.saveVenvPath', result);
+        }
+
+        // Save venv path on manual edit (debounced)
+        (function() {
+            const input = document.getElementById('venv-path');
+            let timer;
+            input.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(async () => {
+                    const val = input.value.trim();
+                    if (val) await ipcRenderer.invoke('setup.saveVenvPath', val);
+                }, 500);
+            });
+        })();
+
+        // ====================================================================
+        // Actions
+        // ====================================================================
+        async function browsePath(depId) {
+            const result = await ipcRenderer.invoke('setup.browse', depId);
+            if (!result) return;
+
+            const dep = deps.find(d => d.id === depId);
+            if (!dep) return;
+
+            dep.path = result;
+            const input = document.getElementById(`path-${depId}`);
+            if (input) input.value = result;
+
+            await onPathChanged(depId);
+        }
+
+        async function onPathChanged(depId) {
+            const input = document.getElementById(`path-${depId}`);
+            if (!input) return;
+            const newPath = input.value.trim();
+            if (!newPath) return;
+
+            const dep = deps.find(d => d.id === depId);
+            if (!dep) return;
+
+            dep.path = newPath;
+
+            // Check if dependency exists at this path
+            const exists = await ipcRenderer.invoke('setup.checkPath', depId, newPath);
+            if (exists) {
+                dep.installed = true;
+                dep.source = 'detected';
+                await ipcRenderer.invoke('setup.savePath', depId, newPath, 'detected');
+                render();
+                updateFooter();
+            } else {
+                dep.installed = false;
+                await ipcRenderer.invoke('setup.savePath', depId, newPath, 'none');
+                render();
+                updateFooter();
+            }
+        }
+
+        async function confirmDownload(depId) {
+            const dep = deps.find(d => d.id === depId);
+            if (!dep) return;
+
+            // Get download info for confirmation
+            const info = await ipcRenderer.invoke('setup.getDownloadInfo', depId);
+            if (!info) return;
+
+            const confirmed = confirm(
+                `Download ${dep.name}?\n\n` +
+                `URL: ${info.url || '(installed via tool)'}\n` +
+                `Expected size on disk: ${info.diskSize}\n\n` +
+                `Files will be installed to:\n${dep.path}\n\n` +
+                `Click OK to proceed.`
+            );
+            if (!confirmed) return;
+
+            startDownload(depId);
+        }
+
+        async function startDownload(depId) {
+            const dep = deps.find(d => d.id === depId);
+            if (!dep) return;
+
+            downloading[depId] = true;
+            render();
+
+            try {
+                const result = await ipcRenderer.invoke('setup.download', depId, dep.path);
+                if (result.success) {
+                    dep.installed = true;
+                    dep.source = 'downloaded';
+                } else {
+                    alert(`Failed to download ${dep.name}:\n${result.error}`);
+                }
+            } catch (err) {
+                alert(`Error downloading ${dep.name}:\n${err.message || err}`);
+            } finally {
+                downloading[depId] = false;
+                render();
+                updateFooter();
+            }
+        }
+
+        async function skipDep(depId) {
+            const dep = deps.find(d => d.id === depId);
+            if (!dep) return;
+
+            dep.installed = true;
+            dep.source = 'manual'; // skipped but marked as handled
+            await ipcRenderer.invoke('setup.savePath', depId, dep.path, 'manual');
+            render();
+            updateFooter();
+        }
+
+        // ====================================================================
+        // Progress
+        // ====================================================================
+        function onProgress(depId, percentage) {
+            const bar = document.getElementById(`pbar-${depId}`);
+            const text = document.getElementById(`ptext-${depId}`);
+            const wrap = document.getElementById(`progress-${depId}`);
+
+            if (wrap) wrap.classList.add('visible');
+            if (bar) bar.style.width = `${percentage}%`;
+            if (text) text.textContent = percentage >= 100
+                ? 'Finishing up...'
+                : `Downloading... ${percentage}%`;
+        }
+
+        // ====================================================================
+        // Footer / Continue
+        // ====================================================================
+        function updateFooter() {
+            const required = deps.filter(d => d.required);
+            const requiredInstalled = required.filter(d => d.installed);
+            const total = deps.length;
+            const totalInstalled = deps.filter(d => d.installed).length;
+
+            const statusEl = document.getElementById('footer-status');
+            const btnContinue = document.getElementById('btn-continue');
+
+            const allRequiredDone = requiredInstalled.length === required.length;
+            const anyDownloading = Object.values(downloading).some(Boolean);
+
+            statusEl.textContent = `${totalInstalled}/${total} dependencies ready (${requiredInstalled.length}/${required.length} required)`;
+
+            btnContinue.disabled = !allRequiredDone || anyDownloading;
+        }
+
+        document.getElementById('btn-continue').addEventListener('click', async () => {
+            await ipcRenderer.invoke('setup.complete');
+            window.close();
+        });
+
+        // ====================================================================
+        // Start
+        // ====================================================================
+        init();
+    </script>
+</body>
+</html>

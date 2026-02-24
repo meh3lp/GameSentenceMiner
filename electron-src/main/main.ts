@@ -47,6 +47,10 @@ import {
     setPythonPath,
     setElectronAppVersion,
     getIconStyle,
+    getDependenciesConfig,
+    getHasCompletedSetup,
+    setDependencyEntry,
+    setHasCompletedSetup,
 } from './store.js';
 import { launchYuzuGameID, openYuzuWindow, registerYuzuIPC } from './ui/yuzu.js';
 import { checkForUpdates } from './update_checker.js';
@@ -66,6 +70,12 @@ import archiver from 'archiver';
 import { registerFrontPageIPC, runOverlay } from './ui/front.js';
 import { registerPythonIPC } from './ui/python.js';
 import { registerStateIPC } from './communication/state.js';
+import { registerSetupIPC, setSetupWindow } from './ui/setup.js';
+import {
+    getDependencyMetas,
+    isDependencyInstalledAt,
+    writeDependencyPathsJson,
+} from './downloader/dependency_downloader.js';
 import { execFile } from 'node:child_process';
 import { c } from 'tar';
 import { autoLauncher } from './auto_launcher.js';
@@ -191,6 +201,7 @@ function registerIPC() {
     registerFrontPageIPC();
     registerPythonIPC();
     registerStateIPC();
+    registerSetupIPC();
 
     ipcMain.handle('show-error-box', async (event, { title, message, detail }) => {
         const response = await dialog.showMessageBox(mainWindow!, {
@@ -672,6 +683,84 @@ function runGSM(command: string, args: string[]): Promise<void> {
     });
 }
 
+// ============================================================================
+// Dependency Setup Window
+// ============================================================================
+
+/**
+ * Checks whether the dependency setup window should be shown.
+ * Returns true if:
+ *   - Setup has never been completed, OR
+ *   - A previously-installed dependency can no longer be found at its stored path
+ */
+function shouldShowSetupWindow(): boolean {
+    if (!getHasCompletedSetup()) {
+        return true;
+    }
+
+    // Check if any installed dependency has disappeared
+    const metas = getDependencyMetas();
+    const storedDeps = getDependenciesConfig();
+
+    for (const meta of metas) {
+        const entry = storedDeps[meta.id];
+        if (entry?.installed && entry.path) {
+            if (!isDependencyInstalledAt(meta, entry.path)) {
+                console.log(`Dependency "${meta.name}" was previously installed at ${entry.path} but is now missing.`);
+                // Mark it as not installed so the setup UI shows it correctly
+                setDependencyEntry(meta.id, {
+                    ...entry,
+                    installed: false,
+                });
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Creates and shows the setup window. Returns a promise that resolves when
+ * the user clicks "Continue" (i.e. all required deps are satisfied).
+ */
+function showSetupWindow(): Promise<void> {
+    return new Promise<void>((resolve) => {
+        const setupWin = new BrowserWindow({
+            width: 860,
+            height: 720,
+            parent: mainWindow ?? undefined,
+            modal: true,
+            show: false,
+            resizable: true,
+            minimizable: false,
+            maximizable: false,
+            icon: getIconPath(),
+            title: 'GameSentenceMiner — Dependency Setup',
+            webPreferences: {
+                nodeIntegration: true,
+                contextIsolation: false,
+                devTools: true,
+            },
+        });
+
+        setupWin.setMenu(null);
+        setSetupWindow(setupWin);
+
+        setupWin.loadFile(path.join(getAssetsDir(), 'setup.html'));
+
+        setupWin.once('ready-to-show', () => {
+            setupWin.show();
+        });
+
+        // Resolved when window is closed (user clicked Continue which calls window.close())
+        setupWin.on('closed', () => {
+            setSetupWindow(null);
+            resolve();
+        });
+    });
+}
+
 async function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -1112,9 +1201,16 @@ if (!app.requestSingleInstanceLock()) {
         }
         createWindow().then(async () => {
             createTray();
-            // setTimeout(async () => {
-            //     await checkAndRunWizard(true);
-            // }, 1000);
+
+            // --- Dependency Setup Window ---
+            if (shouldShowSetupWindow()) {
+                console.log('Dependency setup required. Showing setup window...');
+                await showSetupWindow();
+                console.log('Dependency setup complete.');
+            }
+            // Write dependency paths for Python side
+            writeDependencyPathsJson();
+
             const pyPath = await getOrInstallPython();
             pythonPath = pyPath;
             setPythonPath(pythonPath);

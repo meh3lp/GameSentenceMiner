@@ -853,12 +853,18 @@ class OBS:
         self.get_game_from_scene = True
         self.recording_fps = max(1, min(120, int(self.recording_fps or 15)))
         if not self.obs_path:
-            if is_windows():
-                self.obs_path = os.path.join(get_app_directory(), "obs-studio/bin/64bit/obs64.exe")
-            elif is_linux():
-                self.obs_path = "/usr/bin/obs"
-            elif is_mac():
-                self.obs_path = "/opt/homebrew/bin/obs"
+            dep_dir = get_dependency_path('obs')
+            if dep_dir:
+                candidate = os.path.join(dep_dir, "bin", "64bit", "obs64.exe")
+                if os.path.exists(candidate):
+                    self.obs_path = candidate
+            if not self.obs_path:
+                if is_windows():
+                    self.obs_path = os.path.join(get_app_directory(), "obs-studio/bin/64bit/obs64.exe")
+                elif is_linux():
+                    self.obs_path = "/usr/bin/obs"
+                elif is_mac():
+                    self.obs_path = "/opt/homebrew/bin/obs"
 
 
 @dataclass_json
@@ -1751,6 +1757,36 @@ def get_app_directory():
     return config_dir
 
 
+# ============================================================================
+# Dependency paths (written by Electron setup window)
+# ============================================================================
+
+_dependency_paths_cache = None
+
+def _load_dependency_paths():
+    """Load dependency_paths.json written by the Electron setup window."""
+    global _dependency_paths_cache
+    if _dependency_paths_cache is not None:
+        return _dependency_paths_cache
+    dep_json = os.path.join(get_app_directory(), 'dependency_paths.json')
+    if os.path.exists(dep_json):
+        try:
+            import json
+            with open(dep_json, 'r', encoding='utf-8') as f:
+                _dependency_paths_cache = json.load(f)
+                return _dependency_paths_cache
+        except Exception:
+            pass
+    _dependency_paths_cache = {}
+    return _dependency_paths_cache
+
+
+def get_dependency_path(dep_id, fallback=None):
+    """Get the configured path for a dependency, or fallback."""
+    paths = _load_dependency_paths()
+    return paths.get(dep_id, fallback)
+
+
 # Logging is now handled by GameSentenceMiner.util.logging_config
 # Import at the end of this file to avoid circular dependencies
 
@@ -2033,6 +2069,11 @@ is_beangate = os.path.exists("C:/Users/Beangate")
 
 
 def get_ffmpeg_path():
+    dep_dir = get_dependency_path('ffmpeg')
+    if dep_dir:
+        candidate = os.path.join(dep_dir, "ffmpeg.exe") if is_windows() else os.path.join(dep_dir, "ffmpeg")
+        if os.path.exists(candidate):
+            return candidate
     path = os.path.join(get_app_directory(), "ffmpeg", "ffmpeg.exe") if is_windows() else "ffmpeg"
     if shutil.which(path) is not None:
         return path
@@ -2042,6 +2083,11 @@ def get_ffmpeg_path():
     return path
 
 def get_ffprobe_path():
+    dep_dir = get_dependency_path('ffmpeg')
+    if dep_dir:
+        candidate = os.path.join(dep_dir, "ffprobe.exe") if is_windows() else os.path.join(dep_dir, "ffprobe")
+        if os.path.exists(candidate):
+            return candidate
     path = os.path.join(get_app_directory(), "ffmpeg", "ffprobe.exe") if is_windows() else "ffprobe"
     if shutil.which(path) is not None:
         return path
